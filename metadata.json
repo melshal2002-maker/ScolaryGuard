@@ -1,0 +1,5 @@
+{
+  "name": "ScholarGuard",
+  "description": "A sophisticated academic tool that detects AI-generated content and rephrases text into various scholarly styles using advanced linguistic analysis.",
+  "requestFramePermissions": []
+}
