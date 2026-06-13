@@ -17,33 +17,21 @@ const ProtocolChecklist: React.FC<Props> = ({ state, inputLength }) => {
     },
     {
       id: 2,
-      label: 'Diagnosis',
-      isComplete: !!state.result,
-      isActive: inputLength > 20 && !state.result
+      label: 'Persona',
+      isComplete: !!state.rephrasedContent,
+      isActive: inputLength > 20 && !state.rephrasedContent
     },
     {
       id: 3,
-      label: 'Persona',
+      label: 'Reconstruction',
       isComplete: !!state.rephrasedContent,
-      isActive: !!state.result && !state.rephrasedContent
+      isActive: state.isRephrasing
     },
     {
       id: 4,
-      label: 'Reconstruction',
-      isComplete: !!state.rephrasedContent,
-      isActive: !!state.result && !state.rephrasedContent
-    },
-    {
-      id: 5,
-      label: 'Validation',
-      isComplete: !!state.outputDetectionResult,
-      isActive: !!state.rephrasedContent && !state.outputDetectionResult
-    },
-    {
-      id: 6,
       label: 'Extraction',
-      isComplete: !!state.outputDetectionResult,
-      isActive: !!state.outputDetectionResult && state.outputDetectionResult.score < 30
+      isComplete: !!state.rephrasedContent,
+      isActive: !!state.rephrasedContent
     }
   ];
 

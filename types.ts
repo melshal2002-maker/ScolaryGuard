@@ -49,17 +49,3 @@ export interface AnalysisState {
   error: string | null;
   riskLevel: RiskLevel;
 }
-
-export interface GitHubRepo {
-  id: number;
-  name: string;
-  full_name: string;
-  owner: {
-    login: string;
-  };
-}
-
-export interface GitHubUser {
-  login: string;
-  avatar_url: string;
-}

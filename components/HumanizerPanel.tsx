@@ -1,23 +1,26 @@
 
 import React, { useState } from 'react';
 import { RephraseResult, DetectionResult } from '../types';
-import GitHubSync from './GitHubSync';
 
 interface Props {
-  result: RephraseResult;
+  result?: RephraseResult | null;
   onVerify?: () => void;
   isVerifying?: boolean;
   detectionResult?: DetectionResult | null;
+  onClear?: () => void;
 }
 
-const HumanizerPanel: React.FC<Props> = ({ result, onVerify, isVerifying, detectionResult }) => {
+const HumanizerPanel: React.FC<Props> = ({ result, onVerify, isVerifying, detectionResult, onClear }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
+    if (!result) return;
     navigator.clipboard.writeText(result.rephrased);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const wordCount = result?.rephrased.trim() ? result.rephrased.trim().split(/\s+/).length : 0;
 
   const getBypassColor = (score: number) => {
     if (score > 85) return 'text-emerald-500';
@@ -43,19 +46,15 @@ const HumanizerPanel: React.FC<Props> = ({ result, onVerify, isVerifying, detect
             <div>
               <h4 className="text-[9px] font-black text-blue-400 tracking-widest uppercase mb-0.5">Adversarial Output</h4>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-white tracking-tight uppercase">{result.style}</span>
+                <span className="text-[10px] font-bold text-white tracking-tight uppercase">{result?.style || 'Awaiting Input'}</span>
+                <span className="text-[8px] font-black text-white/30 uppercase tracking-widest ml-2">{wordCount} words</span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <GitHubSync 
-              content={result.rephrased} 
-              defaultFileName={`humanized-${Date.now()}.md`} 
-              title={`Humanized Content (${result.style})`}
-            />
             <div className="flex flex-col items-end">
-               <span className={`text-xl font-black tracking-tighter ${getBypassColor(result.estimatedBypassScore)}`}>
-                 {result.estimatedBypassScore}%
+               <span className={`text-xl font-black tracking-tighter ${result ? getBypassColor(result.estimatedBypassScore) : 'text-slate-700'}`}>
+                 {result ? `${result.estimatedBypassScore}%` : '--%'}
                </span>
                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest whitespace-nowrap">Human Confidence</span>
             </div>
@@ -64,11 +63,20 @@ const HumanizerPanel: React.FC<Props> = ({ result, onVerify, isVerifying, detect
         
         {/* Main scrollable text area */}
         <div className="flex-grow p-6 sm:p-8 overflow-y-auto bg-white">
-          <div className="prose prose-slate max-w-none">
-            <p className="font-serif text-slate-900 leading-[1.8] text-lg sm:text-xl whitespace-pre-wrap selection:bg-blue-100 selection:text-blue-900">
-              {result.rephrased}
-            </p>
-          </div>
+          {!result ? (
+            <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+              <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-100">
+                <i className="fas fa-terminal text-slate-300"></i>
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Awaiting Neural Sequence</p>
+            </div>
+          ) : (
+            <div className="prose prose-slate max-w-none">
+              <p className="font-serif text-slate-900 leading-[1.8] text-lg sm:text-xl whitespace-pre-wrap selection:bg-blue-100 selection:text-blue-900">
+                {result.rephrased}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Verification result (conditionally shown) */}
@@ -97,23 +105,25 @@ const HumanizerPanel: React.FC<Props> = ({ result, onVerify, isVerifying, detect
 
         {/* Control Footer */}
         <div className="px-6 py-6 border-t border-slate-100 bg-slate-50/20">
-          <div className="flex items-center justify-between gap-4">
-            <button 
-              onClick={onVerify}
-              disabled={isVerifying}
-              className="text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-3 rounded-2xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
-            >
-              {isVerifying ? <i className="fas fa-sync fa-spin"></i> : <i className="fas fa-bolt-lightning"></i>}
-              {detectionResult ? 'Re-Scan' : 'Verify'}
-            </button>
-
-            <button 
-              onClick={handleCopy}
-              className="bg-slate-900 text-white px-8 py-3 rounded-2xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-black active:scale-95 shadow-lg"
-            >
-              <i className={`fas ${copied ? 'fa-check' : 'fa-copy'}`}></i>
-              {copied ? 'Copied' : 'Copy Output'}
-            </button>
+          <div className="flex items-center justify-end gap-4">
+            <div className="flex items-center gap-2">
+              {onClear && (
+                <button 
+                  onClick={onClear}
+                  className="bg-slate-100 text-slate-500 px-6 py-3 rounded-2xl transition-all text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 active:scale-95"
+                >
+                  Clear
+                </button>
+              )}
+              <button 
+                onClick={handleCopy}
+                disabled={!result}
+                className="bg-slate-900 text-white px-8 py-3 rounded-2xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-black active:scale-95 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <i className={`fas ${copied ? 'fa-check' : 'fa-copy'}`}></i>
+                {copied ? 'Copied' : 'Copy Output'}
+              </button>
+            </div>
           </div>
           
           <div className="mt-6 p-4 rounded-xl bg-white border border-slate-100">
@@ -122,7 +132,7 @@ const HumanizerPanel: React.FC<Props> = ({ result, onVerify, isVerifying, detect
               Shift Analysis
             </h5>
             <p className="text-[10px] text-slate-600 leading-relaxed font-medium italic">
-              {result.changesSummary}
+              {result?.changesSummary || 'Analysis will be generated upon humanization...'}
             </p>
           </div>
         </div>

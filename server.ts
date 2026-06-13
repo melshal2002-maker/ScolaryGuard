@@ -1,9 +1,8 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import axios from "axios";
-import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
+import axios from "axios";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,136 +12,55 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
-  app.use(cookieParser());
 
-  // --- GitHub OAuth Routes ---
-
-  app.get("/api/auth/github/url", (req, res) => {
-    const clientId = process.env.GITHUB_CLIENT_ID;
-    const redirectUri = `${process.env.APP_URL}/api/auth/github/callback`;
-    const scope = "repo";
-    const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
-    res.json({ url });
+  // --- LM Studio Proxy Endpoints ---
+  app.get("/api/lmstudio/models", async (req, res) => {
+    const queryUrl = req.query.url as string;
+    const lmStudioUrl = queryUrl || process.env.LM_STUDIO_URL || "http://localhost:1234";
+    try {
+      console.log(`Fetching models from LM Studio at ${lmStudioUrl}/v1/models...`);
+      const response = await axios.get(`${lmStudioUrl}/v1/models`, { timeout: 4000 });
+      res.json(response.data);
+    } catch (e: any) {
+      console.warn("LM Studio is offline or unreachable:", e.message);
+      res.status(503).json({ error: "LM Studio is offline or unreachable at " + lmStudioUrl, details: e.message });
+    }
   });
 
-  app.get("/api/auth/github/callback", async (req, res) => {
-    const { code } = req.query;
-    const clientId = process.env.GITHUB_CLIENT_ID;
-    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
-
+  app.post("/api/lmstudio/generate", async (req, res) => {
+    const { model, prompt, temperature, lmStudioUrl: customUrl } = req.body;
+    const lmStudioUrl = customUrl || process.env.LM_STUDIO_URL || "http://localhost:1234";
+    
     try {
-      const response = await axios.post(
-        "https://github.com/login/oauth/access_token",
-        {
-          client_id: clientId,
-          client_secret: clientSecret,
-          code,
-        },
-        {
-          headers: {
-            Accept: "application/json",
-          },
+      console.log(`Sending humanization request to LM Studio at ${lmStudioUrl} for model ${model}...`);
+      const response = await axios.post(`${lmStudioUrl}/v1/chat/completions`, {
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: temperature || 0.8,
+        response_format: { type: "json_object" }
+      }, {
+        timeout: 180000 // 3 minutes for local inference
+      });
+      res.json(response.data);
+    } catch (e: any) {
+      console.error("LM Studio Generation Error:", e.message);
+      // Fallback: try without response_format if some models get strict about it
+      if (e.response?.status === 400 || e.message?.includes("400")) {
+        try {
+          console.log("Retrying without strict response_format...");
+          const response = await axios.post(`${lmStudioUrl}/v1/chat/completions`, {
+            model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: temperature || 0.8
+          }, {
+            timeout: 180000
+          });
+          return res.json(response.data);
+        } catch (retryError: any) {
+          return res.status(500).json({ error: retryError.message });
         }
-      );
-
-      const { access_token } = response.data;
-
-      if (access_token) {
-        res.cookie("github_token", access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "none",
-        });
-        
-        res.send(`
-          <html>
-            <body>
-              <script>
-                if (window.opener) {
-                  window.opener.postMessage({ type: 'GITHUB_AUTH_SUCCESS' }, '*');
-                  window.close();
-                } else {
-                  window.location.href = '/';
-                }
-              </script>
-              <p>Authentication successful. This window should close automatically.</p>
-            </body>
-          </html>
-        `);
-      } else {
-        res.status(400).send("Failed to obtain access token");
       }
-    } catch (error) {
-      console.error("GitHub OAuth Error:", error);
-      res.status(500).send("Internal Server Error");
-    }
-  });
-
-  app.get("/api/auth/github/status", (req, res) => {
-    const token = req.cookies.github_token;
-    res.json({ isAuthenticated: !!token });
-  });
-
-  app.post("/api/auth/github/logout", (req, res) => {
-    res.clearCookie("github_token", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-    });
-    res.json({ success: true });
-  });
-
-  // --- GitHub API Proxy Routes ---
-
-  app.get("/api/github/user", async (req, res) => {
-    const token = req.cookies.github_token;
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-
-    try {
-      const response = await axios.get("https://api.github.com/user", {
-        headers: { Authorization: `token ${token}` },
-      });
-      res.json(response.data);
-    } catch (error: any) {
-      res.status(error.response?.status || 500).json(error.response?.data || {});
-    }
-  });
-
-  app.get("/api/github/repos", async (req, res) => {
-    const token = req.cookies.github_token;
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-
-    try {
-      const response = await axios.get("https://api.github.com/user/repos?sort=updated&per_page=100", {
-        headers: { Authorization: `token ${token}` },
-      });
-      res.json(response.data);
-    } catch (error: any) {
-      res.status(error.response?.status || 500).json(error.response?.data || {});
-    }
-  });
-
-  app.post("/api/github/sync", async (req, res) => {
-    const token = req.cookies.github_token;
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-
-    const { owner, repo, path, content, message, sha } = req.body;
-
-    try {
-      const response = await axios.put(
-        `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-        {
-          message,
-          content: Buffer.from(content).toString("base64"),
-          sha,
-        },
-        {
-          headers: { Authorization: `token ${token}` },
-        }
-      );
-      res.json(response.data);
-    } catch (error: any) {
-      res.status(error.response?.status || 500).json(error.response?.data || {});
+      res.status(500).json({ error: e.message, details: e.response?.data });
     }
   });
 
@@ -155,9 +73,12 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, "dist")));
+    // In production, serve from the dist folder
+    // When bundled in dist-server/server.js, the dist folder is at ../dist
+    const distPath = path.join(__dirname, "../dist");
+    app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 

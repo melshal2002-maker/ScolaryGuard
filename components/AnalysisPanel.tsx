@@ -1,13 +1,13 @@
 
 import React, { useState } from 'react';
 import { DetectionResult } from '../types';
-import GitHubSync from './GitHubSync';
 
 interface Props {
   result: DetectionResult;
+  onClear?: () => void;
 }
 
-const AnalysisPanel: React.FC<Props> = ({ result }) => {
+const AnalysisPanel: React.FC<Props> = ({ result, onClear }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopyAnalysis = () => {
@@ -17,9 +17,7 @@ const AnalysisPanel: React.FC<Props> = ({ result }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const getSyncContent = () => {
-    return `# ScholarGuard Forensic Analysis\n\n**Verdict:** ${result.verdict}\n**AI Probability:** ${result.score}%\n\n## Metrics\n- Perplexity: ${result.metrics.perplexity}%\n- Burstiness: ${result.metrics.burstiness}%\n- Complexity: ${result.metrics.complexity}%\n\n## Analysis\n${result.analysis}\n\n## Identified Signatures\n${result.highlights.map(h => `- **${h.level.toUpperCase()} RISK**: "${h.text}" (${h.reason})`).join('\n')}`;
-  };
+  const wordCount = result.analysis.trim() ? result.analysis.trim().split(/\s+/).length : 0;
 
   const getScoreColor = (score: number) => {
     if (score < 30) return 'text-emerald-500';
@@ -46,6 +44,7 @@ const AnalysisPanel: React.FC<Props> = ({ result }) => {
               <h3 className="text-white font-black text-[10px] uppercase tracking-widest mb-1 flex items-center gap-2">
                 <i className="fas fa-fingerprint text-blue-400"></i>
                 Forensic Analysis
+                <span className="text-slate-600 ml-2">{wordCount} words</span>
               </h3>
               <p className={`text-5xl font-black tracking-tighter ${getScoreColor(result.score)}`}>
                 {result.score}%
@@ -53,11 +52,14 @@ const AnalysisPanel: React.FC<Props> = ({ result }) => {
               <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Probability of Machine Generation</span>
             </div>
             <div className="flex items-center gap-4">
-              <GitHubSync 
-                content={getSyncContent()} 
-                defaultFileName={`analysis-${Date.now()}.md`} 
-                title="Forensic Analysis Report"
-              />
+              {onClear && (
+                <button 
+                  onClick={onClear}
+                  className="text-slate-500 hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest"
+                >
+                  Clear
+                </button>
+              )}
               <button 
                 onClick={handleCopyAnalysis}
                 className="text-slate-500 hover:text-white transition-colors"
